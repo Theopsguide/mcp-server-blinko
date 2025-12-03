@@ -2,9 +2,7 @@
 
 /**
  * This is a MCP server that calls Blinko api to write notes.
- * It demonstrates core MCP concepts like tools by allowing:
- * - Writing flash notes (type 0) to Blinko
- * - Writing normal notes (type 1) to Blinko
+ * Extended version with update, delete, and archive capabilities.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -39,8 +37,8 @@ const apiKey = args.blinko_api_key || process.env.BLINKO_API_KEY || "";
  */
 const server = new Server(
   {
-    name: "mcp-server-blinko",
-    version: "0.0.1",
+    name: "mcp-server-blinko-extended",
+    version: "1.0.0",
   },
   {
     capabilities: {
@@ -51,7 +49,7 @@ const server = new Server(
 
 /**
  * Handler that lists available tools.
- * Exposes two tools for writing notes to Blinko.
+ * Exposes tools for writing, updating, deleting, and archiving notes in Blinko.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -96,6 +94,79 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["content"],
+        },
+      },
+      {
+        name: "update_blinko_note",
+        description: "Update an existing note in Blinko by ID. Can modify content, type, or status flags like archived or pinned.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            noteId: {
+              type: "number",
+              description: "The ID of the note to update",
+            },
+            content: {
+              type: "string",
+              description: "New content for the note (optional)",
+            },
+            type: {
+              type: "number",
+              enum: [0, 1, 2],
+              description: "Note type: 0=flash, 1=normal, 2=todo (optional)",
+            },
+            isArchived: {
+              type: "boolean",
+              description: "Set to true to archive the note (optional)",
+            },
+            isTop: {
+              type: "boolean",
+              description: "Set to true to pin the note to top (optional)",
+            },
+          },
+          required: ["noteId"],
+        },
+      },
+      {
+        name: "delete_blinko_note",
+        description: "Permanently delete a note from Blinko by ID. WARNING: This action cannot be undone.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            noteId: {
+              type: "number",
+              description: "The ID of the note to delete",
+            },
+          },
+          required: ["noteId"],
+        },
+      },
+      {
+        name: "archive_blinko_note",
+        description: "Archive a note in Blinko (move to archive without deleting). Archived notes are preserved but hidden from main view.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            noteId: {
+              type: "number",
+              description: "The ID of the note to archive",
+            },
+          },
+          required: ["noteId"],
+        },
+      },
+      {
+        name: "complete_blinko_todo",
+        description: "Mark a todo as complete by archiving it. Use this when Claude finishes a tracked task. The todo is preserved in archive for metrics/history.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            noteId: {
+              type: "number",
+              description: "The ID of the todo to complete",
+            },
+          },
+          required: ["noteId"],
         },
       },
       {
@@ -190,7 +261,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 /**
  * Handler for the Blinko tools.
- * Creates a new note with the content, saves to Blinko and returns success message.
+ * Creates, updates, deletes, or archives notes as requested.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (!domain) {
@@ -226,6 +297,69 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             type: "text",
             text: `Successfully wrote note to Blinko. Note ID: ${note.id}`,
+          },
+        ],
+      };
+    }
+
+    case "update_blinko_note": {
+      const noteId = Number(request.params.arguments?.noteId);
+      if (!noteId || isNaN(noteId)) {
+        throw new Error("Valid note ID is required");
+      }
+
+      const { content, type, isArchived, isTop } = request.params.arguments || {};
+      const updates: Record<string, unknown> = {};
+      if (content !== undefined) updates.content = String(content);
+      if (type !== undefined) updates.type = Number(type);
+      if (isArchived !== undefined) updates.isArchived = Boolean(isArchived);
+      if (isTop !== undefined) updates.isTop = Boolean(isTop);
+
+      await blinko.updateNote(noteId, updates);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully updated note ${noteId}`,
+          },
+        ],
+      };
+    }
+
+    case "delete_blinko_note": {
+      const noteId = Number(request.params.arguments?.noteId);
+      if (!noteId || isNaN(noteId)) {
+        throw new Error("Valid note ID is required");
+      }
+
+      await blinko.deleteNote(noteId);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully deleted note ${noteId}`,
+          },
+        ],
+      };
+    }
+
+    case "archive_blinko_note":
+    case "complete_blinko_todo": {
+      const noteId = Number(request.params.arguments?.noteId);
+      if (!noteId || isNaN(noteId)) {
+        throw new Error("Valid note ID is required");
+      }
+
+      await blinko.archiveNote(noteId);
+      const action = request.params.name === "complete_blinko_todo" ? "completed" : "archived";
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully ${action} note ${noteId}`,
           },
         ],
       };
@@ -344,7 +478,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { password, isCancel } = request.params.arguments || {};
       const passwordStr = password ? String(password) : "";
       
-      // 验证密码格式（如果提供）
+      // Validate password format if provided
       if (passwordStr && !/^\d{6}$/.test(passwordStr)) {
         throw new Error("Password must be exactly 6 digits");
       }

@@ -1,110 +1,73 @@
-# Blinko MCP Server
+# mcp-server-blinko-extended
 
-A Model Context Protocol (MCP) server for interacting with [Blinko](https://github.com/blinko-space/blinko) note service.
+An extended MCP (Model Context Protocol) server for Blinko note service with update, delete, and archive capabilities.
+
+Forked from [BryceWG/mcp-server-blinko](https://github.com/BryceWG/mcp-server-blinko) to add missing functionality for tracking task completion.
 
 ## Features
 
-- Upsert flash notes (type 0) to Blinko
-- Upsert normal notes (type 1) to Blinko
-- Upsert todos (type 2) to Blinko
-- Search notes with various filters
-- Get daily review notes
-- Clear recycle bin
+All original features plus:
+
+- **update_blinko_note** - Update existing notes by ID (content, type, status flags)
+- **delete_blinko_note** - Permanently delete notes by ID
+- **archive_blinko_note** - Archive notes (move to archive without deleting)
+- **complete_blinko_todo** - Mark todos as complete (archives them for metrics tracking)
 
 ## Installation
-```json
-{
-  "mcpServers": {
-    "mcp-server-blinko": {
-      "command": "npx",
-      "args": ["-y", "mcp-server-blinko@0.0.9"],
-      "env": {
-        "BLINKO_DOMAIN": "https://sample.blinko.com",
-        "BLINKO_API_KEY": "eyj..."
-      }
-    }
-  }
-}
+
+```bash
+npx -y mcp-server-blinko-extended
 ```
 
-### Domain Configuration Examples
+## Claude Code Setup
 
-The `BLINKO_DOMAIN` environment variable supports flexible domain formats:
-
-```json
-// Pure domain examples
-"BLINKO_DOMAIN": "myblinko.com"
-"BLINKO_DOMAIN": "localhost:3000"
-"BLINKO_DOMAIN": "subdomain.example.com"
-
-// Full URL examples  
-"BLINKO_DOMAIN": "https://myblinko.com"
-"BLINKO_DOMAIN": "http://localhost:3000"
-"BLINKO_DOMAIN": "https://myblinko.com:8080"
+```bash
+claude mcp add -s user blinko \
+  -e BLINKO_DOMAIN=<your-blinko-url> \
+  -e BLINKO_API_KEY=<your-api-key> \
+  -- npx -y mcp-server-blinko-extended@latest
 ```
 
-## Usage
+## Environment Variables
 
-Set the following environment variables:
-- `BLINKO_DOMAIN`: Your Blinko service domain. Supports both formats:
-  - Pure domain: `example.com` or `example.com:3000`
-  - Full URL: `https://example.com` or `http://example.com:3000`
-- `BLINKO_API_KEY`: Your Blinko API key
+| Variable | Description |
+|----------|-------------|
+| `BLINKO_DOMAIN` | Your Blinko instance URL (e.g., `https://blinko.example.com`) |
+| `BLINKO_API_KEY` | Your Blinko API key |
 
-## API Documentation
+## Available Tools
 
-The server provides 7 MCP tools:
+### Note Creation
+- `upsert_blinko_flash_note` - Create quick flash notes (type 0)
+- `upsert_blinko_note` - Create normal notes (type 1)
+- `upsert_blinko_todo` - Create todo notes (type 2)
 
-### upsert_blinko_flash_note
-- Description: Write flash note (type 0) to Blinko
-- Parameters:
-  - `content` (string, required): Text content of the note
-- Returns: Success message with the created note ID
+### Note Management (NEW)
+- `update_blinko_note` - Update existing note by ID
+- `delete_blinko_note` - Permanently delete note by ID
+- `archive_blinko_note` - Archive note (move to archive)
+- `complete_blinko_todo` - Mark todo as complete (archives it)
 
-### upsert_blinko_note
-- Description: Write note (type 1) to Blinko
-- Parameters:
-  - `content` (string, required): Text content of the note
-- Returns: Success message with the created note ID
+### Search & Discovery
+- `search_blinko_notes` - Search notes with filters
+- `review_blinko_daily_notes` - Get today's notes for review
 
-### upsert_blinko_todo
-- Description: Write todo (type 2) to Blinko
-- Parameters:
-  - `content` (string, required): Text content of the todo
-- Returns: Success message with the created todo ID
+### Other
+- `share_blinko_note` - Share note publicly with optional password
+- `clear_blinko_recycle_bin` - Empty the recycle bin
 
-### share_blinko_note
-- Description: Share a note or cancel sharing
-- Parameters:
-  - `noteId` (number, required): ID of the note to share
-  - `password` (string, optional): Six-digit password for sharing
-  - `isCancel` (boolean, optional): Whether to cancel sharing (default: false)
-- Returns: Share status, password (if set), and share link (if successful)
+## Usage Example: Task Tracking
 
-### search_blinko_notes
-- Description: Search notes in Blinko with various filters
-- Parameters:
-  - `searchText` (string, required): Search keyword
-  - `size` (number, optional): Number of results to return (default: 5)
-  - `type` (number, optional): Note type: -1 for all, 0 for flash notes, 1 for normal notes
-  - `isArchived` (boolean, optional): Search in archived notes
-  - `isRecycle` (boolean, optional): Search in recycled notes
-  - `isUseAiQuery` (boolean, optional): Use AI-powered search (default: true)
-  - `startDate` (string, optional): Start date in ISO format
-  - `endDate` (string, optional): End date in ISO format
-  - `hasTodo` (boolean, optional): Search only in notes with todos
-- Returns: List of matching notes with their IDs and content
+```
+# Create a todo
+upsert_blinko_todo(content="#claude #project:my-project\n\nImplement feature X")
+# Returns: Note ID: 123
 
-### review_blinko_daily_notes
-- Description: Get today's notes for review
-- Parameters: None
-- Returns: List of today's review notes with their IDs and content
+# When task is done, complete it
+complete_blinko_todo(noteId=123)
+# Todo moves to archive, preserving history for metrics
+```
 
-### clear_blinko_recycle_bin
-- Description: Clear the recycle bin in Blinko
-- Parameters: None
+## License
 
-## Acknowledgment
-- [mcp-server-flomo](https://github.com/chatmcp/mcp-server-flomo)
-
-Developed based on mcp-server-flomo project.
+MIT

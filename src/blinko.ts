@@ -41,6 +41,14 @@ export interface ShareNoteResult {
   shareEncryptedUrl?: string | null;
 }
 
+export interface UpdateNoteParams {
+  content?: string;
+  type?: number;
+  isArchived?: boolean;
+  isRecycle?: boolean;
+  isTop?: boolean;
+}
+
 export class BlinkoClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -200,6 +208,88 @@ export class BlinkoClient {
     } catch (e) {
       throw e;
     }
+  }
+
+  /**
+   * Update an existing note by ID.
+   * Uses the TRPC batch upsert endpoint for modifications.
+   * @param noteId - The ID of the note to update.
+   * @param updates - The fields to update.
+   * @returns Success status.
+   */
+  async updateNote(noteId: number, updates: UpdateNoteParams): Promise<{ success: boolean }> {
+    try {
+      const apiUrl = `${this.baseUrl}/api/trpc/notes.upsert?batch=1`;
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          "0": {
+            "json": {
+              id: noteId,
+              ...updates,
+            },
+          },
+        }),
+      });
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        throw new Error(`Failed to update note: ${resp.status}: ${errorText}`);
+      }
+
+      return { success: true };
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  /**
+   * Delete a note by ID.
+   * Uses the TRPC batch deleteMany endpoint.
+   * @param noteId - The ID of the note to delete.
+   * @returns Success status.
+   */
+  async deleteNote(noteId: number): Promise<{ success: boolean }> {
+    try {
+      const apiUrl = `${this.baseUrl}/api/trpc/notes.deleteMany?batch=1`;
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          "0": {
+            "json": {
+              ids: [noteId],
+            },
+          },
+        }),
+      });
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        throw new Error(`Failed to delete note: ${resp.status}: ${errorText}`);
+      }
+
+      return { success: true };
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  /**
+   * Archive a note by ID.
+   * Convenience method that sets isArchived to true.
+   * @param noteId - The ID of the note to archive.
+   * @returns Success status.
+   */
+  async archiveNote(noteId: number): Promise<{ success: boolean }> {
+    return this.updateNote(noteId, { isArchived: true });
   }
 
   /**
